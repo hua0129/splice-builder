@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 splice_version=2.8.0.1929
 wget https://github.com/splicemachine/spliceengine/archive/2.8.0.1929.tar.gz
 tar -zxvf $splice_version.tar.gz
@@ -15,7 +17,9 @@ sed -i "s:repository.apache.org/snapshots:maven.aliyun.com/nexus/content/reposit
 
 ./spliceengine-$splice_version/start-splice-cluster -k
 
-echo "=================end=================="
+
+echo docker build ..............
+
 
 cat > Dockerfile <<EOF
 FROM centos
@@ -31,4 +35,8 @@ echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 docker pull centos
 docker build -t hua0129/spliceengine:$splice_version .
 
+docker images
+
 docker push hua0129/spliceengine:$splice_version
+
+echo "=================end=================="
