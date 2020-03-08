@@ -1,5 +1,15 @@
-language: python
-python:
-  - "3.6"      # current default Python on Travis CI
-# command to run tests
-script: python buildSplice.py
+language: bash
+
+sudo: required
+
+os:
+    - linux
+
+script:
+    - ./buildSplice.sh
+
+      #language: python
+      #python:
+      #  - "3.6"      # current default Python on Travis CI
+      ## command to run tests
+      #script: python buildSplice.py
