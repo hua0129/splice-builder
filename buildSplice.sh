@@ -16,3 +16,19 @@ sed -i "s:repository.apache.org/snapshots:maven.aliyun.com/nexus/content/reposit
 ./spliceengine-$splice_version/start-splice-cluster -k
 
 echo "=================end=================="
+
+cat > Dockerfile <<EOF
+FROM centos
+ADD spliceengine-$splice_version /opt/
+ENTRYPOINT ["/bin/bash"]
+EOF
+
+
+DOCKER_PASSWORD=hhuuaaxr_123
+DOCKER_USERNAME=hua0129
+
+echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+docker pull centos
+docker build -t hua0129/spliceengine:$splice_version .
+
+docker push hua0129/spliceengine:$splice_version

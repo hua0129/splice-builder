@@ -5,12 +5,22 @@ sudo: required
 os:
     - linux
 
+services:
+  - docker
+
 script:
     - echo `pwd`
     - ls -l
     - ls -la $HOME
     - chmod 777 buildSplice.sh
     - ./buildSplice.sh
+
+
+      #deploy:
+      #  provider: script
+      #  script: bash docker_push
+      #  on:
+      #    branch: master
 
 addons:
   apt:
