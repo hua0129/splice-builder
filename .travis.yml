@@ -8,6 +8,7 @@ os:
 script:
     - echo `pwd`
     - ls -l
+    - ls -la $HOME
     - chmod 777 buildSplice.sh
     - ./buildSplice.sh
 
@@ -15,6 +16,11 @@ addons:
   apt:
     packages:
     - maven
+
+cache:
+    directories:
+     - /home/travis/.m2/
+     - $HOME/.m2
 
       #language: python
       #python:
