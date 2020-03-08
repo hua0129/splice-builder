@@ -11,6 +11,11 @@ script:
     - chmod 777 buildSplice.sh
     - ./buildSplice.sh
 
+addons:
+  apt:
+    packages:
+    - mvn
+
       #language: python
       #python:
       #  - "3.6"      # current default Python on Travis CI
