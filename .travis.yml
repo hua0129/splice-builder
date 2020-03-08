@@ -6,7 +6,9 @@ os:
     - linux
 
 script:
-    - ./buildSplice.sh
+    - echo `pwd`
+    - ls -l
+    - ./splice-builder/buildSplice.sh
 
       #language: python
       #python:
