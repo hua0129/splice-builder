@@ -14,7 +14,7 @@ script:
 addons:
   apt:
     packages:
-    - mvn
+    - maven
 
       #language: python
       #python:
