@@ -8,7 +8,8 @@ os:
 script:
     - echo `pwd`
     - ls -l
-    - ./splice-builder/buildSplice.sh
+    - chmod 777 buildSplice.sh
+    - ./buildSplice.sh
 
       #language: python
       #python:
