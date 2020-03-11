@@ -2,8 +2,9 @@
 
 set -x
 
-splice_version=2.8.0.1929
-wget https://github.com/splicemachine/spliceengine/archive/2.8.0.1929.tar.gz
+#splice_version=2.8.0.1929
+splice_version=2.8.0.1946
+wget https://github.com/splicemachine/spliceengine/archive/$splice_version.tar.gz
 tar -zxvf $splice_version.tar.gz
 
 sed -i "s/splice>/longdb>/" spliceengine-$splice_version/db-tools-ij/src/main/java/com/splicemachine/db/impl/tools/ij/utilMain.java
@@ -22,9 +23,9 @@ echo docker build ..............
 
 
 cat > Dockerfile <<EOF
-FROM centos
+FROM alpine
 ADD spliceengine-$splice_version /opt/
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["/bin/sh"]
 EOF
 
 
@@ -32,11 +33,9 @@ DOCKER_PASSWORD=hhuuaaxr_123
 DOCKER_USERNAME=hua0129
 
 echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-docker pull centos
+#docker pull centos
 docker build -t hua0129/spliceengine:$splice_version .
-
 docker images
-
 docker push hua0129/spliceengine:$splice_version
 
 echo "=================end=================="
