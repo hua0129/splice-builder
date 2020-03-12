@@ -38,4 +38,14 @@ docker build -t hua0129/spliceengine:$splice_version .
 docker images
 docker push hua0129/spliceengine:$splice_version
 
+tar -zcvf m2.tar.gz ~/.m2/
+
+cat > Dockerfile <<EOF
+FROM alpine
+ADD m2.tar.gz /opt/
+ENTRYPOINT ["/bin/sh"]
+EOF
+docker build -t hua0129/spliceengine-m2:$splice_version .
+docker push hua0129/spliceengine-m2:$splice_version
+
 echo "=================end=================="
