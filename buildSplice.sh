@@ -38,12 +38,11 @@ docker build -t hua0129/spliceengine:$splice_version .
 docker images
 docker push hua0129/spliceengine:$splice_version
 
-tar -zcvf m2.tar.gz ~/.m2/
+tar -zcvf m2.tar.gz -C ~ .m2
 
 cat > Dockerfile <<EOF
-FROM alpine
-ADD m2.tar.gz /opt/
-ENTRYPOINT ["/bin/sh"]
+FROM circleci/openjdk:8u212-jdk-stretch
+ADD m2.tar.gz /home/circleci/
 EOF
 docker build -t hua0129/spliceengine-m2:$splice_version .
 docker push hua0129/spliceengine-m2:$splice_version
