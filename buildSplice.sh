@@ -42,9 +42,11 @@ tar -zcvf m2.tar.gz -C ~ .m2
 
 cat > Dockerfile <<EOF
 FROM circleci/openjdk:8u212-jdk-stretch
+USER circleci
 ADD m2.tar.gz /home/circleci/
 EOF
 docker build -t hua0129/spliceengine-m2:$splice_version .
+docker images
 docker push hua0129/spliceengine-m2:$splice_version
 
 echo "=================end=================="
