@@ -1,0 +1,1 @@
+docker run -ti  --sysctl net.ipv6.conf.all.disable_ipv6=1  -v /mnt/hgfs/D/work/longdb/docker_longdb/resources:/hostdir  --hostname localhost -p 1527:1527 -p 4040:4040 -p 7078:7078  -p 8088:8088 -p 8080:8080 -p 8090:8090 -p 8091:8091 -p 4041:4041 -p 8081:8081 -p 8082:8082 longdb/longdb:v1.1.5

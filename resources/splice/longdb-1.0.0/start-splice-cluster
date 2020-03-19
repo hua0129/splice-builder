@@ -1,0 +1,250 @@
+#!/bin/bash
+
+##################################################################################
+# Start Zookeeper and the Splice HBase master server and region servers and yarn
+#
+# Currently, if compilation fails, it still tries to start Zoo and RSes.
+#   An enhancement would be to tee build output to a Named Pipe to monitor for
+#   "[INFO] BUILD SUCCESS" before starting, like this example:
+#   mkfifo -m 770 /tmp/myfifo
+#   iter=0 ; while true ; do echo $iter 2>&1 | tee /tmp/myfifo ; iter=$((${iter}+1)) ; sleep 1 ; done
+#   while true ; do sleep 1 ; grep -q 6 /tmp/myfifo && echo 'i found a 6!' ; done
+##################################################################################
+
+##################################################################################
+# Function to kill all splice test processes - zoo, SpliceTestPlatform, YARN, and
+# anything started from maven exec, i.e., mvn exec:exec
+##################################################################################
+_kill_em_all () {
+  SIG=$1
+   local P=$(ps -ef | awk '/SpliceTestPlatform|SpliceSinglePlatform|SpliceTestClusterParticipant|OlapServerMaster/ && !/awk/ {print $2}')
+   [[ -n $P ]] && echo "Found Longdb. Stopping it." && for pid in $P; do kill -$SIG `echo $pid`; done
+
+   P=$(ps -ef | awk '/spliceYarn|CoarseGrainedScheduler|ExecutorLauncher/ && !/awk/ {print $2}')
+   [[ -n $P ]] && echo "Found Yarn. Stopping it." && for pid in $P; do kill -$SIG `echo $pid`; done
+
+   P=$(ps -ef | awk '/zookeeper/ && !/awk/ {print $2}')
+   [[ -n $P ]] && echo "Found ZooKeeper. Stopping it." && for pid in $P; do kill -$SIG `echo $pid`; done
+
+   P=$(ps -ef | awk '/TestKafkaCluster/ && !/awk/ {print $2}')
+   [[ -n $P ]] && echo "Found Kafka. Stopping it." && for pid in $P; do kill -$SIG `echo $pid`; done
+
+   P=$(ps -ef | awk '/exec:java/ && !/awk/ {print $2}')
+   [[ -n $P ]] && echo "Found stray maven exec:java. Stopping it." && for pid in $P; do kill -$SIG `echo $pid`; done
+}
+export -f _kill_em_all
+
+wait_for () {
+	LOG_FILE=$1
+	shift
+	NEEDLE=$*
+
+	echo -n "  Waiting. "
+	while ! grep -q "$NEEDLE" $LOG_FILE 
+		do echo -n ". " 
+		sleep 2
+	done
+	echo
+}
+
+BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DEFAULT_PROFILE="cdh5.8.3"  # default hbase platform profile
+PROFILE=$DEFAULT_PROFILE
+IN_MEM_PROFILE="mem"
+RUN_DIR="${BASE_DIR}/platform_it"
+
+BUILD="1"
+CLEAN="1"
+CHAOS="false"
+
+MEMBERS=2
+DEBUG_PATH=""
+
+MVN='mvn -B'
+MVNDBG='mvnDebug -B'
+
+usage() {
+    # $1 is an error, if any
+    if [[ -n "${1}" ]]; then
+        echo "Error: ${1}"
+    fi
+    echo "Usage: $0 -p [<hbase_profile>] [-s <n>] [-c] [-k] -f -h[elp]"
+    echo "Where: "
+    echo "  -b is an optional argument specifying to NOT ${MVN} clean install -DskipTest -Dspark-prepare first. The default is to build first."
+    echo "  -l is an optional argument specifying to NOT run clean the environment."
+    echo "  -f is an optional argument specifying to run a fully distributed, secure environment, with Kerberos and HDFS."
+    echo "  -s <n> is an optional number of additional cluster RegionServer members to start. The default is 1 master and 2 region servers."
+    echo "  -c is an optional flag determining random task failures. Default is that the chaos monkey NOT run. To see if you have the chaos monkey running, execute: grep 'task fail' <hbase_profile>/splice_machine_test/splice-derby.log"
+    echo "  -p <hbase_profile> is the optional splice hbase platform to run. Default is ${DEFAULT_PROFILE}. (available options are in the top level pom.xml file)"
+    echo "  -k just KILL any and all splice processes currently running."
+    echo "  -h => print this message"
+}
+
+while getopts "chkp:s:bld:f" flag ; do
+    case $flag in
+        h* | \?)
+            usage
+            exit 0 # This is not an error, User asked help. Don't do "exit 1"
+        ;;
+        c)
+        # start server with the chaos monkey (random task failures)
+            CHAOS="true"
+        ;;
+        b)
+        # DO NOT clean build first
+            BUILD="0"
+        ;;
+        l)
+        # DO NOT clean first
+            CLEAN="0"
+        ;;
+	f)
+	# Fully distributed & secure
+		DISTRIBUTED="1"
+	;;
+        p)
+        # the hbase profile
+            PROFILE="${OPTARG}"
+        ;;
+        s)
+        # number of cluster members
+           MEMBERS=$(($MEMBERS + $OPTARG))
+        ;;
+        d)
+        # path to write debug file
+           DEBUG_PATH=$OPTARG
+        ;;
+        k)
+        # KILL current processes
+           _kill_em_all 9
+           exit 0
+        ;;
+        ?)
+            usage "Unknown option (ignored): ${OPTARG}"
+            exit 1
+        ;;
+    esac
+done
+
+SYSTEM_PROPS="-Dlog4j.configuration=hbase-log4j.properties -DfailTasksRandomly=${CHAOS}"
+
+
+#=============================================================================
+# Run...
+#=============================================================================
+_kill_em_all 9
+
+HBASE_PROFILE=${PROFILE%%,*}
+if [[ ${HBASE_PROFILE} == ${IN_MEM_PROFILE} ]]; then
+  RUN_DIR="${BASE_DIR}/mem_sql"
+# Otherwise, set (in)secure option
+elif [[ "${DISTRIBUTED}" == "1" ]]; then
+    PROFILE="secure,${PROFILE}"
+else
+    PROFILE="insecure,${PROFILE}"
+fi
+
+echo "Running Longdb $PROFILE master and ${MEMBERS} regionservers with CHAOS = ${CHAOS} in:"
+echo "   ${RUN_DIR}"
+
+if [[ "${BUILD}" == "1" ]]; then
+  echo "Building first..."
+  pushd "${BASE_DIR}" > /dev/null
+  if [[ "${CLEAN}" == "1" ]]; then
+    (${MVN} clean install -Pcore,${PROFILE} -DskipTests )
+  else
+    (${MVN} install -Pcore,${PROFILE} -DskipTests )
+  fi
+  popd > /dev/null
+  echo "Running Longdb $PROFILE master and ${MEMBERS} regionservers with CHAOS = $CHAOS in:"
+  echo "   ${RUN_DIR}"
+fi
+
+pushd "${RUN_DIR}" > /dev/null
+## delete old logs before we start fresh
+/bin/rm -f *.log*
+
+# Run IN MEMORY
+if [[ ${HBASE_PROFILE} == ${IN_MEM_PROFILE} ]]; then
+  MEM_LOG="${RUN_DIR}/spliceMem.log"
+  echo "Starting MEM. Log file is ${MEM_LOG}"
+  (${MVN} -Pmem exec:java > ${MEM_LOG} 2>&1) &    ## IN MEMORY
+  exit 0;
+fi
+
+ZOO_LOG="${RUN_DIR}/zoo.log"
+echo "Starting ZooKeeper. Log file is ${ZOO_LOG}"
+(${MVN} exec:exec -Denv=${HBASE_PROFILE} -P${PROFILE},spliceZoo > ${ZOO_LOG} 2>&1) &    ## zookeeper
+#######################################################################################################
+# Wait for up to 65 seconds for zoo to start, checking nc periodically to see if we are connected
+# This makes use of ZooKeeper's 'Four-Letter Words' commands to determine the liveness of ZooKeeper
+# In particular, it uses netcat (nc) to pipe the command 'ruok' to zookeeper on it's connection port.
+# If ZooKeeper responds with 'imok', then the server is up. If it returns empty, then zookeeper
+# hasn't started yet. If the count goes to 0, and we never got 'imok', then we want to blow up because
+# ZooKeeper didn't start up properly
+#######################################################################################################
+COUNT=65
+ZOO_UP=""
+until [ $COUNT -lt 0 ]; do
+    sleep 1
+    ZOO_UP=$(echo 'ruok' | nc localhost 2181)
+    if [ -z "$ZOO_UP" ]; then
+                    break
+    fi
+    let COUNT-=1
+done
+
+if [ ${COUNT} -eq 0 ]; then
+    echo "ZooKeeper did not start up properly, aborting startup. Please check ${RUN_DIR}/zoo.log for more information"
+    exit 5
+fi
+
+if [[ "${DISTRIBUTED}" == "1" ]]; then
+    KDC_LOG="${RUN_DIR}/kdc.log"
+    echo "Starting KDC. Log file is ${KDC_LOG}"
+    (${MVN} exec:java -Denv=${HBASE_PROFILE} -P${PROFILE},spliceKDC > ${KDC_LOG} 2>&1) &  ## KDC
+    wait_for ${KDC_LOG} "KDC cluster started" 
+    
+    export MAVEN_OPTS="$MAVEN_OPTS -Djava.security.krb5.conf=${RUN_DIR}/target/krb5.conf -Dsun.security.krb5.debug=true"
+    
+    HDFS_LOG="${RUN_DIR}/hdfs.log"
+    echo "Starting HDFS. Log file is ${HDFS_LOG}"
+    (${MVN} exec:java -Denv=${HBASE_PROFILE} -P${PROFILE},spliceHdfs > ${HDFS_LOG} 2>&1) &  ## HDFS
+    wait_for ${HDFS_LOG} "HDFS cluster started"
+fi 
+  
+YARN_LOG="${RUN_DIR}/yarn.log"
+echo "Starting YARN. Log file is ${YARN_LOG}"
+(${MVN} exec:java -Denv=${HBASE_PROFILE} -P${PROFILE},spliceYarn > ${YARN_LOG} 2>&1) &  ## YARN
+
+KAFKALOG="${RUN_DIR}"/kafka.log
+# Start Kafka in background.
+echo "Starting Kafka, log file is ${KAFKALOG}"
+(${MVN} exec:exec -Denv=${HBASE_PROFILE} -P${PROFILE},spliceKafka > ${KAFKALOG} 2>&1) &
+
+SPLICE_LOG="${RUN_DIR}/longdb.log"
+echo "Starting Master and 1 Region Server. Log file is ${SPLICE_LOG}"
+## (master + region server on 1527)
+
+if [ -z "${SERVER_SSLMODE}" ]; then
+  (${MVN} exec:exec -Denv=${HBASE_PROFILE} -P${PROFILE},spliceFast ${SYSTEM_PROPS} -Dxml.plan.debug.path=${DEBUG_PATH} > ${SPLICE_LOG} 2>&1) &
+else
+  (${MVN} exec:exec -Denv=${HBASE_PROFILE} -P${PROFILE},spliceFastSSL ${SYSTEM_PROPS} -Dxml.plan.debug.path=${DEBUG_PATH} > ${SPLICE_LOG} 2>&1) &
+fi
+
+echo -n "  Waiting. "
+while ! echo exit | nc localhost 1527; do echo -n ". " ; sleep 2; done
+echo
+
+if [[ ${MEMBERS} -gt 0 ]]; then
+  for (( MEMBER=1; MEMBER<${MEMBERS}; MEMBER++ )); do
+    REGION_SVR_LOG="${RUN_DIR}/spliceRegionSvr$(($MEMBER +1)).log"
+    echo "Starting Region Server ${REGION_SVR_LOG}"
+    ## (region server, splice on 1528, 1529, ...)
+    (${MVN} exec:exec -Denv=${HBASE_PROFILE} -P${PROFILE},spliceClusterMember ${SYSTEM_PROPS} -DmemberNumber=${MEMBER} -Dxml.plan.debug.path=${DEBUG_PATH} > ${REGION_SVR_LOG} 2>&1) &
+    echo -n "  Waiting. "
+    while ! echo exit | nc localhost $(( 1527 + ${MEMBER} )); do echo -n ". " ; sleep 2; done
+    echo
+  done
+fi
+popd > /dev/null

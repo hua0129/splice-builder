@@ -1,0 +1,27 @@
+version: 2.1
+
+jobs:
+  build:
+    working_directory: ~/longdb
+    docker:
+      - image: circleci/openjdk:8u212-jdk-stretch
+        #- image: hua0129/spliceengine-m2:2.8.0.1946
+    steps:
+      - checkout
+      - setup_remote_docker
+      - restore_cache:
+          key: splice-builder-longdb-parcel-build
+      - run: 
+          name: Running Script ...
+          command: |
+            env
+            chmod +x build-all.sh
+            ./build-all.sh
+      - save_cache:
+          paths:
+          - ~/.m2
+          key: splice-builder-longdb-parcel-build
+      - store_artifacts:
+          path: ~/longdb/docker
+        
+

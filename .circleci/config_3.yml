@@ -1,0 +1,36 @@
+version: 2.1
+
+jobs:
+  build:
+    working_directory: ~/longdb
+      #machine:
+      #image: ubuntu-1604:201903-01
+    docker:
+      - image: circleci/node:jessie
+    steps:
+      - checkout
+      - run:
+          working_directory: ~/longdb/view
+          name: "Build"
+          command: |
+              npm install
+              npm run build
+              #mvn -f view/pom.xml compile -DskipTests
+              ls
+              pwd
+              env
+
+      - save_cache:
+          paths:
+          - ~/.m2
+          key: longdb-csd-{{ checksum "server/pom.xml" }}
+
+      - run: mvn -f server/pom2.xml package -DskipTests
+
+      - store_test_results:
+          path: target/surefire-reports
+          
+      - store_artifacts:
+          path: /home/circleci/.npm/_logs
+        
+
